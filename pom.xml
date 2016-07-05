@@ -10,8 +10,8 @@
     <packaging>jar</packaging>
 
     <properties>
-        <solr.version>5.4.0</solr.version>
-        <solr.maven.version>5.4.0</solr.maven.version>
+        <solr.version>5.5.1</solr.version>
+        <solr.maven.version>5.5.1</solr.maven.version>
     </properties>
 
     <dependencies>
@@ -19,6 +19,11 @@
             <groupId>org.apache.solr</groupId>
             <artifactId>solr-solrj</artifactId>
             <version>${solr.maven.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.ibm.watson.developer_cloud</groupId>
+            <artifactId>java-sdk</artifactId>
+            <version>3.0.1</version>
         </dependency>
     </dependencies>
 

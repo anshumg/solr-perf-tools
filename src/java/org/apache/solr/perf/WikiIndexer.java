@@ -21,7 +21,6 @@ package org.apache.solr.perf;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.impl.*;
 
-import java.util.Random;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class WikiIndexer {
@@ -29,7 +28,7 @@ public final class WikiIndexer {
   public static void main(String[] clArgs) throws Exception {
     Args args = new Args(clArgs);
     StatisticsHelper stats;
-    if (args.getFlag("-useCloudSolrClient")) {
+    if (args.getString("-client").toLowerCase().equals("cloud")) {
       // todo fix this
       stats = StatisticsHelper.createLocalStats();
     } else  {
@@ -47,20 +46,6 @@ public final class WikiIndexer {
 
     Args args = new Args(clArgs);
 
-    final boolean useHttpSolrClient = args.getFlag("-useHttpSolrClient");
-    final boolean useConcurrentUpdateSolrClient = args.getFlag("-useConcurrentUpdateSolrClient");
-    final boolean useCloudSolrClient = args.getFlag("-useCloudSolrClient");
-
-    final String zkHost, collectionName, solrUrl;
-    if (useCloudSolrClient) {
-      zkHost = args.getString("-zkHost");
-      collectionName = args.getString("-collection");
-      solrUrl = null;
-    } else {
-      zkHost = collectionName = null;
-      solrUrl = args.getString("-solrUrl");
-    }
-
     final String lineFile = args.getString("-lineDocsFile");
 
     // -1 means all docs in the line file:
@@ -77,8 +62,6 @@ public final class WikiIndexer {
     // docs from the line file source:
     final boolean repeatDocs = args.getFlag("-repeatDocs");
 
-    args.check();
-
     System.out.println("Line file: " + lineFile);
     System.out.println("Doc count limit: " + (docCountLimit == -1 ? "all docs" : "" + docCountLimit));
     System.out.println("Threads: " + numThreads);
@@ -89,26 +72,21 @@ public final class WikiIndexer {
 
     final AtomicBoolean indexingFailed = new AtomicBoolean();
 
+
     final SolrClient client;
-    if (useHttpSolrClient) {
-      HttpSolrClient c = new HttpSolrClient(solrUrl);
-      c.setParser(new BinaryResponseParser());
-      c.setRequestWriter(new BinaryRequestWriter());
-      client = c;
-    } else if (useConcurrentUpdateSolrClient) {
-      ConcurrentUpdateSolrClient c = new ConcurrentUpdateSolrClient(solrUrl, batchSize * 2, numThreads);
-      c.setParser(new BinaryResponseParser());
-      c.setRequestWriter(new BinaryRequestWriter());
-      c.setPollQueueTime(0);
-      client = c;
+
+    client = getClient(args);
+
+
+    if(client instanceof ConcurrentUpdateSolrClient)
       numThreads = 1; // no need to spawn multiple feeder threads when using ConcurrentUpdateSolrClient
-    } else if (useCloudSolrClient) {
-      CloudSolrClient c = new CloudSolrClient(zkHost);
-      c.setDefaultCollection(collectionName);
-      client = c;
-    } else {
-      throw new RuntimeException("Either -useHttpSolrClient or -useConcurrentUpdateSolrClient or -useCloudSolrClient must be specified");
+
+    if(args.getFlag("-cleanup")) {
+      client.deleteByQuery("*:*");
+      client.commit();
     }
+
+    args.check();
 
     try {
       LineFileDocs lineFileDocs = new LineFileDocs(lineFile, repeatDocs);
@@ -140,6 +118,37 @@ public final class WikiIndexer {
       System.out.println("\nIndexer: " + (threads.getBytesIndexed() / 1024. / 1024. / 1024. / ((tFinal - t0) / 3600000.)) + " GB/hour plain text");
     } finally {
       client.close();
+    }
+  }
+
+  public static SolrClient getClient(Args args) {
+    String client = args.getString("-client");
+
+    final String zkHost, collectionName, solrUrl;
+
+    if(client.toLowerCase().equals("http")) {
+      solrUrl = args.getString("-solrUrl");
+      HttpSolrClient c = new HttpSolrClient(solrUrl);
+      c.setParser(new BinaryResponseParser());
+      c.setRequestWriter(new BinaryRequestWriter());
+      return c;
+    } else if (client.equals("cloud")) {
+      zkHost = args.getString("-zkHost");
+      collectionName = args.getString("-collection");
+      CloudSolrClient c = new CloudSolrClient(zkHost);
+      c.setDefaultCollection(collectionName);
+      return c;
+    } else if (client.equals("cusc")) {
+      solrUrl = args.getString("-solrUrl");
+      final int batchSize = args.getInt("-batchSize");
+      final int numThreads = args.getInt("-threadCount");
+      ConcurrentUpdateSolrClient c = new ConcurrentUpdateSolrClient(solrUrl, batchSize * 2, numThreads);
+      c.setParser(new BinaryResponseParser());
+      c.setRequestWriter(new BinaryRequestWriter());
+      c.setPollQueueTime(0);
+      return c;
+    } else {
+      throw new RuntimeException("Invalid client specified.");
     }
   }
 }

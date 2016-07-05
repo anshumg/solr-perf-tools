@@ -184,6 +184,7 @@ class IndexThreads {
             }
           }
         } else {
+          boolean exit = false;
           outer:
           while (!stop.get()) {
             if (batchSize > 1)  {
@@ -196,18 +197,19 @@ class IndexThreads {
                   }
                   break outer;
                 }
-//              Object id = doc.getFieldValue("id");
-//              if (doc.getFieldValue("body").toString().length() > 10922)  {
-//                System.out.println("Long body: id = " + id);
-//                i--;
-//                continue;
-//              }
-//              if (id.equals("00547r") || id.equals("03fetn") || id.equals("04n7lu") || id.equals("04z8uc")) {
-//                i--;
-//                continue;
-//              }
+              Object id = doc.getFieldValue("id");
+              if (doc.getFieldValue("body").toString().length() > 10922)  {
+                System.out.println("Long body: id = " + id);
+                i--;
+                continue;
+              }
+              if (id.equals("00547r") || id.equals("03fetn") || id.equals("04n7lu") || id.equals("04z8uc")) {
+                i--;
+                continue;
+              }
                 int docCount = count.incrementAndGet();
                 if (numTotalDocs != -1 && docCount > numTotalDocs) {
+                  exit = true;
                   break;
                 }
                 if ((docCount % 100000) == 0) {
@@ -222,13 +224,25 @@ class IndexThreads {
 
               if (!list.isEmpty()) {
                 client.add(list);
+                //client.commit();
+              }
+              if (exit) {
+                break;
               }
             } else  {
               final SolrInputDocument doc = docs.nextDoc(docState);
               if (doc == null) {
                 break;
               }
+              Object id = doc.getFieldValue("id");
+              if (id.equals("00547r") || id.equals("03fetn") || id.equals("04n7lu") || id.equals("04z8uc")) {
+                continue;
+              }
               client.add(doc);
+              int docCount = count.incrementAndGet();
+              if (numTotalDocs != -1 && docCount > numTotalDocs)
+                break;
+              //client.commit();
             }
           }
         }
